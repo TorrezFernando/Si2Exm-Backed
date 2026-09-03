@@ -1,0 +1,50 @@
+# ─── Entorno virtual ───────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+
+# ─── Variables de entorno (NUNCA subir al repo) ────────────
+.env
+
+# ─── Base de datos local ───────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+
+# ─── Caché de Python ───────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.pyc
+
+# ─── Distribución y empaquetado ────────────────────────────
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# ─── Pytest / Coverage ─────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# ─── IDEs ──────────────────────────────────────────────────
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ─── Logs ──────────────────────────────────────────────────
+*.log
+
+# ─── Misc ──────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
