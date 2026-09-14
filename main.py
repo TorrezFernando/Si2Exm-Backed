@@ -53,6 +53,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ─── Archivos Estáticos (Imágenes subidas) ────────────────────────────────────
+from fastapi.staticfiles import StaticFiles
+import os
+
+os.makedirs("uploads", exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
 # ─── Health Check ─────────────────────────────────────────────────────────────
 @app.get("/", tags=["Health"])
 def root():
@@ -66,8 +73,7 @@ def root():
 
 
 # ─── Routers (CU = Caso de Uso) ───────────────────────────────────────────────
-from api.routers import auth, users
-
+from api.routers import auth, users, products, branches, orders, roles, audit
 # CU-01, CU-02: Registro y Login
 app.include_router(
     auth.router,
@@ -80,4 +86,38 @@ app.include_router(
     users.router,
     prefix=f"{settings.API_V1_STR}/users",
     tags=["👥 Usuarios y Roles"],
+)
+
+# CU-04: Catálogo y Productos
+app.include_router(
+    products.router,
+    prefix=f"{settings.API_V1_STR}/products",
+    tags=["🛍️ Catálogo y Productos"],
+)
+
+# CU-05: Sucursales
+app.include_router(
+    branches.router,
+    prefix=f"{settings.API_V1_STR}/branches",
+    tags=["🏢 Sucursales"],
+)
+
+# CU-10, CU-11: Ventas y Órdenes
+app.include_router(
+    orders.router,
+    prefix=f"{settings.API_V1_STR}/orders",
+    tags=["🛒 Ventas y Órdenes"],
+)
+
+# RBAC y Auditoría
+app.include_router(
+    roles.router,
+    prefix=f"{settings.API_V1_STR}/roles",
+    tags=["🛡️ Roles y Permisos"],
+)
+
+app.include_router(
+    audit.router,
+    prefix=f"{settings.API_V1_STR}/audit",
+    tags=["📋 Bitácora (Audit)"],
 )

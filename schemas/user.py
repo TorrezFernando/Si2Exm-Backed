@@ -1,16 +1,7 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional
-from enum import Enum
+from typing import Optional, List
 from datetime import datetime
-
-
-class RoleEnum(str, Enum):
-    """Espejo del enum de SQLAlchemy para validación Pydantic."""
-    admin = "admin"
-    encargado = "encargado"
-    cajero = "cajero"
-    cliente = "cliente"
-
+from schemas.rbac import RoleSchema, UserPermissionSchema
 
 # ─── Schemas base ─────────────────────────────────────────────────────────────
 
@@ -35,8 +26,8 @@ class UserCreateByAdmin(UserBase):
     Permite especificar rol y la sucursal a la que pertenece (para cajero/encargado).
     """
     password: str
-    role: RoleEnum = RoleEnum.cliente
-    branch_id: Optional[int] = None  # Obligatorio si role == cajero o encargado
+    role_id: int
+    branch_id: Optional[int] = None  # Obligatorio si role_id pertenece a cajero o encargado
 
 
 # ─── Actualización de usuario (CU-03) ────────────────────────────────────────
@@ -48,7 +39,7 @@ class UserUpdate(BaseModel):
     """
     full_name: Optional[str] = None
     phone: Optional[str] = None
-    role: Optional[RoleEnum] = None
+    role_id: Optional[int] = None
     branch_id: Optional[int] = None  # Permite reasignar sucursal
     is_active: Optional[bool] = None
 
@@ -64,10 +55,12 @@ class PasswordChange(BaseModel):
 
 class UserInDBBase(UserBase):
     id: int
-    role: RoleEnum
+    role_id: Optional[int] = None
     branch_id: Optional[int] = None
     is_active: bool
     created_at: datetime
+    role: Optional[RoleSchema] = None
+    user_permissions: List[UserPermissionSchema] = []
 
     class Config:
         from_attributes = True
@@ -88,7 +81,7 @@ class UserInDB(UserInDBBase):
 class Token(BaseModel):
     access_token: str
     token_type: str
-    role: str       # Devolvemos el rol en el login para que el frontend redirija
+    role: Optional[str] = None # Role name
 
 
 class TokenPayload(BaseModel):

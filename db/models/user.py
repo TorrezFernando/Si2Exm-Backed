@@ -1,22 +1,8 @@
 import enum
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Enum
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from db.database import Base
-
-
-class RoleEnum(str, enum.Enum):
-    """
-    Roles del sistema FashionStore:
-    - admin      : Acceso total. Gestiona usuarios, sucursales, catálogo y reportes.
-    - encargado  : Gestor de una sucursal específica. Administra reservas e inventario local.
-    - cajero     : Empleado de caja en una sucursal. Registra ventas presenciales.
-    - cliente    : Usuario final que navega el catálogo, reserva y compra.
-    """
-    admin = "admin"
-    encargado = "encargado"
-    cajero = "cajero"
-    cliente = "cliente"
 
 
 class User(Base):
@@ -36,8 +22,8 @@ class User(Base):
     full_name = Column(String, nullable=True)
     phone = Column(String, nullable=True)
 
-    # Rol del usuario dentro del sistema
-    role = Column(Enum(RoleEnum), default=RoleEnum.cliente, nullable=False)
+    # Nuevo sistema RBAC
+    role_id = Column(Integer, ForeignKey("roles.id"), nullable=True) # Todos deberían tener rol, pero nullable en migración
 
     # Sucursal asignada (solo relevante para cajero/encargado)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
@@ -46,5 +32,12 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    # Relación con Branch (lazy=True para no cargar siempre)
+    # Relación con Branch
     branch = relationship("Branch", foreign_keys=[branch_id])
+    
+    # Relación con Role
+    role = relationship("Role", back_populates="users")
+    
+    # Permisos individuales que sobreescriben los del rol
+    user_permissions = relationship("UserPermission")
+

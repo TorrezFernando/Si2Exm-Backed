@@ -9,6 +9,7 @@ class Branch(Base):
     name = Column(String, index=True, nullable=False)
     address = Column(String, nullable=False)
     phone = Column(String, nullable=True)
+    image_url = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     
     inventories = relationship("Inventory", back_populates="branch")

@@ -8,6 +8,7 @@ class Category(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True, nullable=False)
     description = Column(Text, nullable=True)
+    image_url = Column(String, nullable=True)
     
     products = relationship("Product", back_populates="category")
 
@@ -20,6 +21,7 @@ class Product(Base):
     base_price = Column(Float, nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id"))
     season = Column(String) # e.g., Summer 2026
+    image_url = Column(String, nullable=True)
     
     category = relationship("Category", back_populates="products")
     variants = relationship("ProductVariant", back_populates="product", cascade="all, delete-orphan")
@@ -33,6 +35,7 @@ class ProductVariant(Base):
     color = Column(String, nullable=False) # e.g., Red, Blue
     sku = Column(String, unique=True, index=True, nullable=False)
     price_override = Column(Float, nullable=True) # Optional different price for specific variant
+    image_url = Column(String, nullable=True)
     
     product = relationship("Product", back_populates="variants")
     inventories = relationship("Inventory", back_populates="variant")

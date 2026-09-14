@@ -1,32 +1,16 @@
-"""
-Router: Gestión de Usuarios y Roles (Admin)
-=============================================
-CU-03: El administrador puede crear, leer, actualizar y desactivar usuarios.
-       También puede asignar roles y sucursales a empleados.
-
-Endpoints disponibles (prefijo: /api/v1/users):
-  GET    /               → Listar todos los usuarios (Admin)
-  POST   /               → Crear nuevo usuario con rol específico (Admin)
-  GET    /me             → Ver perfil propio (cualquier usuario autenticado)
-  GET    /{user_id}      → Ver usuario por ID (Admin)
-  PATCH  /{user_id}      → Actualizar usuario: nombre, rol, sucursal, estado (Admin)
-  DELETE /{user_id}      → Desactivar usuario (soft delete) (Admin)
-  POST   /{user_id}/activate   → Reactivar usuario (Admin)
-  PATCH  /{user_id}/role       → Cambiar solo el rol de un usuario (Admin)
-  POST   /change-password      → Cambiar contraseña propia (cualquier usuario)
-"""
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from api.deps import (
     get_db,
     get_current_active_user,
-    require_admin,
-    require_admin_or_encargado,
+    require_permission,
 )
+from api.audit_logger import log_audit
 from core import security
-from db.models.user import User, RoleEnum
+from db.models.user import User
+from db.models.rbac import Role, UserPermission
 from db.models.branch import Branch
 from schemas.user import (
     User as UserSchema,
@@ -44,21 +28,17 @@ router = APIRouter()
 def list_users(
     *,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
-    skip: int = Query(0, ge=0, description="Número de registros a omitir (paginación)"),
-    limit: int = Query(50, ge=1, le=200, description="Máximo de registros a devolver"),
-    role: Optional[RoleEnum] = Query(None, description="Filtrar por rol específico"),
-    branch_id: Optional[int] = Query(None, description="Filtrar por sucursal"),
-    is_active: Optional[bool] = Query(None, description="Filtrar por estado activo/inactivo"),
+    current_user: User = Depends(require_permission("users:read")),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    role_id: Optional[int] = None,
+    branch_id: Optional[int] = None,
+    is_active: Optional[bool] = None,
 ) -> Any:
-    """
-    CU-03: Lista todos los usuarios del sistema con filtros opcionales.
-    Solo accesible para el rol Admin.
-    """
-    query = db.query(User)
+    query = db.query(User).options(joinedload(User.role), joinedload(User.user_permissions))
 
-    if role is not None:
-        query = query.filter(User.role == role)
+    if role_id is not None:
+        query = query.filter(User.role_id == role_id)
     if branch_id is not None:
         query = query.filter(User.branch_id == branch_id)
     if is_active is not None:
@@ -67,60 +47,41 @@ def list_users(
     return query.offset(skip).limit(limit).all()
 
 
-# ─── CREAR USUARIO CON ROL (por Admin) ───────────────────────────────────────
+# ─── CREAR USUARIO ──────────────────────────────────────────────────────────
 
 @router.post("/", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
 def create_user_by_admin(
     *,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_permission("users:write")),
     user_in: UserCreateByAdmin,
 ) -> Any:
-    """
-    CU-03: El administrador crea un usuario con un rol específico.
-
-    Reglas de negocio:
-    - Si el rol es 'cajero' o 'encargado', se debe proporcionar un branch_id válido.
-    - El correo electrónico debe ser único en el sistema.
-    """
-    # Verificar email único
     existing = db.query(User).filter(User.email == user_in.email).first()
     if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Ya existe un usuario con el correo: {user_in.email}",
-        )
+        raise HTTPException(status_code=400, detail="Ya existe un usuario con este correo.")
 
-    # Validar que cajero/encargado tengan sucursal asignada
-    if user_in.role in (RoleEnum.cajero, RoleEnum.encargado):
-        if not user_in.branch_id:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"El rol '{user_in.role.value}' requiere asignar una sucursal (branch_id).",
-            )
-        # Verificar que la sucursal exista y esté activa
-        branch = db.query(Branch).filter(
-            Branch.id == user_in.branch_id,
-            Branch.is_active == True,
-        ).first()
-        if not branch:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Sucursal con ID {user_in.branch_id} no encontrada o inactiva.",
-            )
+    role = db.query(Role).filter(Role.id == user_in.role_id).first()
+    if not role:
+        raise HTTPException(status_code=404, detail="Rol no encontrado.")
 
-    # Crear el usuario
+    # Logica simple para obligar branch a encargados/cajeros (basado en nombre temporalmente, aunque deberia ser mas generico)
+    if role.name in ("cajero", "encargado") and not user_in.branch_id:
+        raise HTTPException(status_code=422, detail="Roles operativos requieren branch_id.")
+
     new_user = User(
         email=user_in.email,
         hashed_password=security.get_password_hash(user_in.password),
         full_name=user_in.full_name,
         phone=user_in.phone,
-        role=user_in.role,
+        role_id=user_in.role_id,
         branch_id=user_in.branch_id,
     )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+
+    log_audit(db, current_user.id, "CREATE", "USER", str(new_user.id), {"email": new_user.email})
+
     return new_user
 
 
@@ -130,171 +91,113 @@ def create_user_by_admin(
 def get_user(
     *,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_permission("users:read")),
     user_id: int,
 ) -> Any:
-    """CU-03: Obtiene el detalle completo de un usuario por su ID."""
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).options(joinedload(User.role), joinedload(User.user_permissions)).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado.")
     return user
 
 
-# ─── ACTUALIZAR USUARIO (nombre, rol, sucursal, estado) ──────────────────────
+# ─── ACTUALIZAR USUARIO ───────────────────────────────────────────────────────
 
 @router.patch("/{user_id}", response_model=UserSchema)
 def update_user(
     *,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_permission("users:write")),
     user_id: int,
     user_in: UserUpdate,
 ) -> Any:
-    """
-    CU-03: Actualiza datos de un usuario.
-    Permite cambiar nombre, teléfono, rol, sucursal y estado activo/inactivo.
-
-    Si se cambia el rol a cajero/encargado, se valida que tenga branch_id.
-    """
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado.")
 
-    # Determinar el rol final (el nuevo si viene, el actual si no)
-    final_role = user_in.role if user_in.role is not None else user.role
-    final_branch = user_in.branch_id if user_in.branch_id is not None else user.branch_id
+    # Protect Admin role logic
+    if user.role and user.role.name == "admin" and user_in.role_id is not None and user_in.role_id != user.role_id:
+        admin_count = db.query(User).join(Role).filter(Role.name == "admin", User.is_active == True).count()
+        if admin_count <= 1:
+            raise HTTPException(status_code=400, detail="No puedes quitarle el rol al último administrador.")
 
-    # Validar sucursal para roles de empleado
-    if final_role in (RoleEnum.cajero, RoleEnum.encargado) and not final_branch:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"El rol '{final_role.value}' requiere una sucursal asignada.",
-        )
-
-    # Validar que la sucursal exista si se proporciona
-    if user_in.branch_id is not None:
-        branch = db.query(Branch).filter(Branch.id == user_in.branch_id).first()
-        if not branch:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Sucursal con ID {user_in.branch_id} no encontrada.",
-            )
-
-    # Aplicar cambios (solo los campos que no sean None)
     update_data = user_in.model_dump(exclude_unset=True)
+    old_values = {k: getattr(user, k) for k in update_data.keys()}
+
     for field, value in update_data.items():
         setattr(user, field, value)
 
     db.commit()
     db.refresh(user)
-    return user
+
+    log_audit(db, current_user.id, "UPDATE", "USER", str(user.id), {"old": old_values, "new": update_data})
+
+    # Recargar con relaciones
+    return db.query(User).options(joinedload(User.role)).filter(User.id == user_id).first()
 
 
-# ─── CAMBIAR SOLO EL ROL ─────────────────────────────────────────────────────
+# ─── GESTIONAR PERMISOS INDIVIDUALES DE USUARIO ──────────────────────────────
 
-@router.patch("/{user_id}/role", response_model=UserSchema)
-def change_user_role(
+@router.post("/{user_id}/permissions")
+def update_user_permissions(
     *,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_permission("roles:manage")),
     user_id: int,
-    new_role: RoleEnum = Query(..., description="Nuevo rol a asignar"),
-    branch_id: Optional[int] = Query(None, description="Sucursal (requerida para cajero/encargado)"),
+    permission_id: int,
+    is_granted: bool
 ) -> Any:
-    """
-    CU-03: Endpoint dedicado al cambio de rol de un usuario.
-    Más conveniente que PATCH cuando solo se quiere cambiar el rol.
-    """
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+        
+    # Check if admin is trying to be modified (Admin has all perms by default)
+    if user.role and user.role.name == "admin":
+        raise HTTPException(status_code=400, detail="El administrador principal es inmodificable en sus permisos.")
 
-    # No se puede quitar el rol admin si es el único admin
-    if user.role == RoleEnum.admin and new_role != RoleEnum.admin:
-        admin_count = db.query(User).filter(
-            User.role == RoleEnum.admin, User.is_active == True
-        ).count()
-        if admin_count <= 1:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No se puede cambiar el rol del único administrador activo del sistema.",
-            )
+    up = db.query(UserPermission).filter(
+        UserPermission.user_id == user_id, 
+        UserPermission.permission_id == permission_id
+    ).first()
 
-    if new_role in (RoleEnum.cajero, RoleEnum.encargado):
-        bid = branch_id or user.branch_id
-        if not bid:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Se requiere branch_id para asignar el rol '{new_role.value}'.",
-            )
-        branch = db.query(Branch).filter(Branch.id == bid).first()
-        if not branch:
-            raise HTTPException(status_code=404, detail="Sucursal no encontrada.")
-        user.branch_id = bid
+    if up:
+        up.is_granted = is_granted
+    else:
+        up = UserPermission(user_id=user_id, permission_id=permission_id, is_granted=is_granted)
+        db.add(up)
 
-    user.role = new_role
     db.commit()
-    db.refresh(user)
-    return user
+    
+    log_audit(db, current_user.id, "UPDATE", "USER_PERMISSION", str(user_id), {"permission_id": permission_id, "is_granted": is_granted})
+    
+    return {"message": "Permiso actualizado correctamente"}
 
 
-# ─── DESACTIVAR USUARIO (soft delete) ─────────────────────────────────────────
+# ─── DESACTIVAR USUARIO ────────────────────────────────────────────────────────
 
 @router.delete("/{user_id}", response_model=UserSchema)
 def deactivate_user(
     *,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_permission("users:write")),
     user_id: int,
 ) -> Any:
-    """
-    CU-03: Desactiva un usuario (soft delete).
-    No elimina el registro de la BD para preservar historial de reservas/ventas.
-    """
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado.")
 
     if user.id == current_user.id:
-        raise HTTPException(
-            status_code=400,
-            detail="No puedes desactivar tu propia cuenta.",
-        )
+        raise HTTPException(status_code=400, detail="No puedes desactivarte a ti mismo.")
 
-    # Proteger al último admin
-    if user.role == RoleEnum.admin:
-        admin_count = db.query(User).filter(
-            User.role == RoleEnum.admin, User.is_active == True
-        ).count()
+    if user.role and user.role.name == "admin":
+        admin_count = db.query(User).join(Role).filter(Role.name == "admin", User.is_active == True).count()
         if admin_count <= 1:
-            raise HTTPException(
-                status_code=400,
-                detail="No se puede desactivar al único administrador activo.",
-            )
+            raise HTTPException(status_code=400, detail="No se puede desactivar al último administrador.")
 
     user.is_active = False
     db.commit()
-    db.refresh(user)
-    return user
-
-
-# ─── REACTIVAR USUARIO ────────────────────────────────────────────────────────
-
-@router.post("/{user_id}/activate", response_model=UserSchema)
-def activate_user(
-    *,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
-    user_id: int,
-) -> Any:
-    """CU-03: Reactiva un usuario previamente desactivado."""
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado.")
-
-    user.is_active = True
-    db.commit()
-    db.refresh(user)
+    
+    log_audit(db, current_user.id, "DELETE", "USER", str(user.id), {"is_active": False})
+    
     return user
 
 
@@ -307,10 +210,12 @@ def change_own_password(
     current_user: User = Depends(get_current_active_user),
     password_data: PasswordChange,
 ) -> Any:
-    """Permite a cualquier usuario autenticado cambiar su propia contraseña."""
     if not security.verify_password(password_data.current_password, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="La contraseña actual es incorrecta.")
 
     current_user.hashed_password = security.get_password_hash(password_data.new_password)
     db.commit()
+    
+    log_audit(db, current_user.id, "UPDATE", "USER_PASSWORD", str(current_user.id), None)
+    
     return {"message": "Contraseña actualizada exitosamente."}
