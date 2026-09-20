@@ -200,10 +200,19 @@ def ai_reports_chat(
         )
         prompt = f"{system_instruction}\n\nPregunta del usuario:\n{req.message}\n\nRespuesta:"
         
-        response = client.models.generate_content(
-            model='gemini-1.5-flash',
-            contents=prompt,
-        )
+        try:
+            response = client.models.generate_content(
+                model='gemini-1.5-flash',
+                contents=prompt,
+            )
+        except Exception as e:
+            if "NOT_FOUND" in str(e):
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=prompt,
+                )
+            else:
+                raise e
         
         return {"response": response.text}
     except Exception as e:
