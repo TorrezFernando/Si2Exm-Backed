@@ -56,19 +56,25 @@ async def chat_with_ai(
         
         prompt = f"{system_instruction}\n\nHistorial de chat:\n{conversation}\nAI:"
         
-        try:
-            response = client.models.generate_content(
-                model="gemini-1.5-flash",
-                contents=prompt,
-            )
-        except Exception as e:
-            if "NOT_FOUND" in str(e):
+        models_to_try = ["gemini-1.5-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-2.5-flash"]
+        response = None
+        last_error = None
+        for model_name in models_to_try:
+            try:
                 response = client.models.generate_content(
-                    model="gemini-2.5-flash",
+                    model=model_name,
                     contents=prompt,
                 )
-            else:
-                raise e
+                break
+            except Exception as e:
+                if "NOT_FOUND" in str(e):
+                    last_error = e
+                    continue
+                else:
+                    raise e
+        
+        if not response:
+            raise ValueError(f"Ningún modelo funcionó. Último error: {last_error}")
         if not response.text:
             raise ValueError("Respuesta vacía de Gemini")
             
