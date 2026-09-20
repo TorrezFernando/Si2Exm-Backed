@@ -6,3 +6,4 @@ from db.models.reservation import Reservation, ReservationItem
 from db.models.sale import Order, OrderItem
 from db.models.rbac import Role, Permission, RolePermission, UserPermission
 from db.models.audit import AuditLog
+from db.models.recommendation import UserPreference

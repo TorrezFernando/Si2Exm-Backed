@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Any
 from datetime import datetime
 from pydantic import BaseModel
 from db.models.sale import OrderTypeEnum, PaymentMethodEnum, PaymentStatusEnum
@@ -11,9 +11,28 @@ class OrderItemBase(BaseModel):
 class OrderItemCreate(OrderItemBase):
     pass
 
+class ProductSummary(BaseModel):
+    id: int
+    name: str
+    image_url: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+
+class VariantSummary(BaseModel):
+    id: int
+    size: str
+    color: str
+    product: Optional[ProductSummary] = None
+    image_url: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+
 class OrderItem(OrderItemBase):
     id: int
     order_id: int
+    variant: Optional[VariantSummary] = None
 
     class Config:
         from_attributes = True

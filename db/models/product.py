@@ -26,6 +26,10 @@ class Product(Base):
     category = relationship("Category", back_populates="products")
     variants = relationship("ProductVariant", back_populates="product", cascade="all, delete-orphan")
 
+    # ─── Virtual Try-On IA ────────────────────────────────────────────────────
+    garment_image_url = Column(String, nullable=True)   # Foto prenda (para IA)
+    garment_type = Column(String, nullable=True)         # upper_body | lower_body | dresses
+
 class ProductVariant(Base):
     __tablename__ = "product_variants"
 
@@ -38,4 +42,16 @@ class ProductVariant(Base):
     image_url = Column(String, nullable=True)
     
     product = relationship("Product", back_populates="variants")
-    inventories = relationship("Inventory", back_populates="variant")
+    inventories = relationship("Inventory", back_populates="variant", cascade="all, delete-orphan")
+
+    @property
+    def quantity(self) -> int:
+        if not self.inventories:
+            return 0
+        return sum(inv.stock for inv in self.inventories if inv.stock is not None)
+
+    @quantity.setter
+    def quantity(self, value):
+        # quantity is now a computed field (sum of all branch inventories).
+        # Do NOT distribute the total back to branches — manage inventories directly.
+        pass

@@ -178,13 +178,13 @@ def seed():
                 "name": "encargado",
                 "description": "Encargado de Sucursal",
                 "is_predefined": True,
-                "perms": ["users:read", "branches:read", "catalog:read", "inventory:read", "inventory:write", "sales:read", "reservations:read", "reservations:write"]
+                "perms": ["users:read", "branches:read", "catalog:read", "catalog:write", "inventory:read", "inventory:write", "sales:read", "reservations:read", "reservations:write"]
             },
             {
                 "name": "cajero",
                 "description": "Cajero de Sucursal",
                 "is_predefined": True,
-                "perms": ["catalog:read", "inventory:read", "sales:write", "reservations:read"]
+                "perms": ["catalog:read", "inventory:read", "sales:write", "reservations:read", "reservations:write"]
             },
             {
                 "name": "cliente",

@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from api.deps import get_db, get_current_user
 from db.models.user import User
 from db.models.sale import Order, OrderItem, OrderTypeEnum, PaymentStatusEnum
+from db.models.branch import Inventory
 from schemas.sale import Order as OrderSchema, OrderCreate
 
 router = APIRouter()
@@ -21,7 +22,7 @@ def list_orders(
     Los clientes solo ven sus propias órdenes.
     Los admins/encargados/cajeros pueden ver más (depende del rol, pero para simplicidad mostramos todas si son admin).
     """
-    if current_user.role.value == "cliente":
+    if current_user.role.name == "cliente":
         orders = db.query(Order).filter(Order.user_id == current_user.id).offset(skip).limit(limit).all()
     else:
         orders = db.query(Order).offset(skip).limit(limit).all()
@@ -35,8 +36,8 @@ def create_order(
     current_user: User = Depends(get_current_user)
 ) -> Any:
     """
-    Crea una nueva orden de compra (Checkout desde el Carrito).
-    Calcula el total a partir de los items enviados.
+    Crea una nueva orden de compra (Checkout desde el Carrito / POS Caja).
+    Calcula el total a partir de los items enviados y descuenta del inventario.
     """
     # Calcular total amount
     total_amount = sum(item.quantity * item.unit_price for item in order_in.items)
@@ -61,7 +62,7 @@ def create_order(
     db.commit()
     db.refresh(order)
     
-    # Crear items
+    # Crear items y descontar inventario
     for item_in in order_in.items:
         order_item = OrderItem(
             order_id=order.id,
@@ -70,7 +71,19 @@ def create_order(
             unit_price=item_in.unit_price
         )
         db.add(order_item)
-        
+
+        # Actualizar stock en la sucursal o cualquier inventario de la variante
+        inv_query = db.query(Inventory).filter(Inventory.variant_id == item_in.variant_id)
+        if order_in.branch_id:
+            inv = inv_query.filter(Inventory.branch_id == order_in.branch_id).first()
+            if not inv:
+                inv = inv_query.first()
+        else:
+            inv = inv_query.first()
+
+        if inv:
+            inv.stock = max(0, inv.stock - item_in.quantity)
+
     db.commit()
     db.refresh(order)
     

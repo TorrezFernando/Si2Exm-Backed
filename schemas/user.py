@@ -1,6 +1,7 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional, List
 from datetime import datetime
+import re
 from schemas.rbac import RoleSchema, UserPermissionSchema
 
 # ─── Schemas base ─────────────────────────────────────────────────────────────
@@ -16,6 +17,19 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     """Schema para el registro público de un nuevo cliente."""
     password: str
+
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, v):
+        if len(v) < 6:
+            raise ValueError("La contraseña debe tener al menos 6 caracteres")
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("La contraseña debe contener al menos una mayúscula")
+        if not re.search(r"\d", v):
+            raise ValueError("La contraseña debe contener al menos un número")
+        if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", v):
+            raise ValueError("La contraseña debe contener al menos un carácter especial")
+        return v
 
 
 # ─── Creación de usuario por Admin (CU-03) ────────────────────────────────────

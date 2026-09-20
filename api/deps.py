@@ -59,6 +59,27 @@ def get_current_active_user(
         raise HTTPException(status_code=400, detail="Usuario inactivo.")
     return current_user
 
+oauth2_scheme_optional = OAuth2PasswordBearer(
+    tokenUrl=f"{settings.API_V1_STR}/auth/login", 
+    auto_error=False
+)
+
+def get_current_user_optional(
+    db: Session = Depends(get_db),
+    token: str = Depends(oauth2_scheme_optional),
+) -> User | None:
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+        )
+        token_data = TokenPayload(**payload)
+    except (JWTError, ValidationError):
+        return None
+    user = db.query(User).options(joinedload(User.role)).filter(User.id == int(token_data.sub)).first()
+    return user
+
 def get_user_permissions(db: Session, user: User) -> set[str]:
     """Obtiene el set de permisos (strings) de un usuario (Rol + UserPermissions)."""
     permissions = set()

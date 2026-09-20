@@ -47,7 +47,7 @@ app = FastAPI(
 # ─── CORS ─────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],        # ⚠️ Ajustar a dominios específicos en producción
+    allow_origins=settings.BACKEND_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -73,12 +73,24 @@ def root():
 
 
 # ─── Routers (CU = Caso de Uso) ───────────────────────────────────────────────
-from api.routers import auth, users, products, branches, orders, roles, audit
+from api.routers import auth, users, products, branches, orders, roles, audit, reservations, ai_tryon, inventory, reports
 # CU-01, CU-02: Registro y Login
 app.include_router(
     auth.router,
     prefix=f"{settings.API_V1_STR}/auth",
     tags=["🔐 Autenticación"],
+)
+
+app.include_router(
+    reports.router,
+    prefix=f"{settings.API_V1_STR}/reports",
+    tags=["📊 Reportes"],
+)
+
+app.include_router(
+    inventory.router,
+    prefix=f"{settings.API_V1_STR}/inventory",
+    tags=["📦 Inventario"],
 )
 
 # CU-03: Gestión de Usuarios y Roles (Admin)
@@ -120,4 +132,25 @@ app.include_router(
     audit.router,
     prefix=f"{settings.API_V1_STR}/audit",
     tags=["📋 Bitácora (Audit)"],
+)
+
+# CU-06: Reservas
+app.include_router(
+    reservations.router,
+    prefix=f"{settings.API_V1_STR}/reservations",
+    tags=["📅 Reservas"],
+)
+
+# IA: Virtual Try-On con Gemini
+app.include_router(
+    ai_tryon.router,
+    prefix=f"{settings.API_V1_STR}/ai/tryon",
+    tags=["🤖 IA Try-On"],
+)
+
+from api.routers import ai_chat
+app.include_router(
+    ai_chat.router,
+    prefix=f"{settings.API_V1_STR}/ai/chat",
+    tags=["🤖 IA Chat"],
 )
