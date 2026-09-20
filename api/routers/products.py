@@ -30,7 +30,7 @@ def list_categories(
 
 # --- PRODUCTS ---
 
-@router.get("/", response_model=List[ProductSchema])
+@router.get("", response_model=List[ProductSchema])
 def list_products(
     db: Session = Depends(get_db),
     category_id: Optional[int] = Query(None, description="Filtrar por categoría"),
@@ -214,7 +214,7 @@ def generate_unique_sku(db: Session, base_name: str, size: str, color: str, requ
         counter += 1
     return candidate
 
-@router.post("/", response_model=ProductSchema, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ProductSchema, status_code=status.HTTP_201_CREATED)
 def create_product(
     *,
     db: Session = Depends(get_db),

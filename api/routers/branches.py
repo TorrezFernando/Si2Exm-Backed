@@ -8,7 +8,7 @@ from schemas.branch import Branch as BranchSchema, BranchCreate, BranchUpdate
 
 router = APIRouter()
 
-@router.get("/", response_model=List[BranchSchema])
+@router.get("", response_model=List[BranchSchema])
 def list_branches(
     db: Session = Depends(get_db),
     active_only: bool = True
@@ -29,7 +29,7 @@ def get_branch(
         raise HTTPException(status_code=404, detail="Sucursal no encontrada")
     return branch
 
-@router.post("/", response_model=BranchSchema, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=BranchSchema, status_code=status.HTTP_201_CREATED)
 def create_branch(
     *,
     db: Session = Depends(get_db),

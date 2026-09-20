@@ -24,7 +24,7 @@ router = APIRouter()
 
 # ─── LISTAR USUARIOS ──────────────────────────────────────────────────────────
 
-@router.get("/", response_model=List[UserSchema])
+@router.get("", response_model=List[UserSchema])
 def list_users(
     *,
     db: Session = Depends(get_db),
@@ -49,7 +49,7 @@ def list_users(
 
 # ─── CREAR USUARIO ──────────────────────────────────────────────────────────
 
-@router.post("/", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
 def create_user_by_admin(
     *,
     db: Session = Depends(get_db),

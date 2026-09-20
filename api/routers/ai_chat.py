@@ -57,7 +57,7 @@ async def chat_with_ai(
         prompt = f"{system_instruction}\n\nHistorial de chat:\n{conversation}\nAI:"
         
         response = client.models.generate_content(
-            model="gemini-1.5-flash-latest",  # Modelo gratuito de texto
+            model="gemini-1.5-flash",  # Modelo gratuito de texto
             contents=prompt,
         )
         

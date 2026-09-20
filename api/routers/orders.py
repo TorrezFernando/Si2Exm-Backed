@@ -10,7 +10,7 @@ from schemas.sale import Order as OrderSchema, OrderCreate
 
 router = APIRouter()
 
-@router.get("/", response_model=List[OrderSchema])
+@router.get("", response_model=List[OrderSchema])
 def list_orders(
     db: Session = Depends(get_db),
     skip: int = 0,
@@ -28,7 +28,7 @@ def list_orders(
         orders = db.query(Order).offset(skip).limit(limit).all()
     return orders
 
-@router.post("/", response_model=OrderSchema, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=OrderSchema, status_code=status.HTTP_201_CREATED)
 def create_order(
     *,
     db: Session = Depends(get_db),

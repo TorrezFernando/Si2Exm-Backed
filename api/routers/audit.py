@@ -8,7 +8,7 @@ from schemas.audit import AuditLogSchema
 
 router = APIRouter()
 
-@router.get("/", response_model=List[AuditLogSchema])
+@router.get("", response_model=List[AuditLogSchema])
 def get_audit_logs(
     db: Session = Depends(get_db),
     _ = Depends(require_permission("audit:read")),

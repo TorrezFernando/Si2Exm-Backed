@@ -19,7 +19,7 @@ def list_permissions(
     return db.query(Permission).all()
 
 
-@router.get("/", response_model=List[RoleSchema])
+@router.get("", response_model=List[RoleSchema])
 def list_roles(
     db: Session = Depends(get_db),
     _ = Depends(require_permission("roles:manage"))
@@ -27,7 +27,7 @@ def list_roles(
     return db.query(Role).options(joinedload(Role.permissions)).all()
 
 
-@router.post("/", response_model=RoleSchema, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=RoleSchema, status_code=status.HTTP_201_CREATED)
 def create_role(
     *,
     db: Session = Depends(get_db),
