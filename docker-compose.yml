@@ -5,7 +5,7 @@ services:
     build: .
     container_name: fashionstore_backend
     ports:
-      - "8000:8000"
+      - "80:8000"
     volumes:
       # Montar base de datos SQLite y uploads para que persistan a los reinicios de Docker
       - ./fashionstore.db:/app/fashionstore.db
