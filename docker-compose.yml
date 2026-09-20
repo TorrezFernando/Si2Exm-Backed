@@ -1,15 +1,16 @@
 version: '3.8'
-services:
-  db:
-    image: postgres:15
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: fashionstore
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
 
-volumes:
-  postgres_data:
+services:
+  backend:
+    build: .
+    container_name: fashionstore_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # Montar base de datos SQLite y uploads para que persistan a los reinicios de Docker
+      - ./fashionstore.db:/app/fashionstore.db
+      - ./uploads:/app/uploads
+      - ./.env:/app/.env
+    environment:
+      - ENVIRONMENT=production
+    restart: always
