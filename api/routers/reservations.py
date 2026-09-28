@@ -7,6 +7,7 @@ from api.deps import get_db, get_current_active_user, require_permission
 from db.models.user import User
 from db.models.reservation import Reservation, ReservationItem, ReservationStatus
 from db.models.product import ProductVariant
+from db.models.branch import Inventory
 from schemas.reservation import (
     Reservation as ReservationSchema,
     ReservationCreate,
@@ -86,7 +87,25 @@ def create_reservation(
     db.refresh(reservation)
 
     for item_in in reservation_in.items:
-        # Verificar que la variante existe
+        # Bloqueo pesimista: with_for_update() impide que otro hilo modifique el stock simultaneamente
+        inv_query = db.query(Inventory).filter(Inventory.variant_id == item_in.variant_id)
+        if reservation_in.branch_id:
+            inv = inv_query.filter(Inventory.branch_id == reservation_in.branch_id).with_for_update().first()
+            if not inv:
+                inv = inv_query.with_for_update().first()
+        else:
+            inv = inv_query.with_for_update().first()
+
+        if not inv or inv.stock < item_in.quantity:
+            db.delete(reservation)
+            db.commit()
+            raise HTTPException(status_code=400, detail=f"Stock insuficiente para la variante {item_in.variant_id}")
+            
+        # Descontamos el stock físico temporalmente
+        inv.stock -= item_in.quantity
+        db.add(inv)
+
+        # Verificar que la variante existe para obtener el precio
         variant = db.query(ProductVariant).filter(ProductVariant.id == item_in.variant_id).first()
         if not variant:
             db.delete(reservation)
